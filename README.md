@@ -20,7 +20,7 @@ CIVOPS turns an Android phone running Termux into a passive signal intelligence 
 | **Wi-Fi Scanner** | SSIDs, BSSIDs, RSSI, channel, security flags (WPA2/WPA/WEP/OPEN/WPS), vendor |
 | **Cell Scanner** | LTE/WCDMA/GSM tower detection, serving tower identification, carrier lookup |
 | **Delta Timeline** | Tracks NEW / LOST / RETURNING signal events in real time |
-| **Debrief Export** | One-tap LLM-ready prompt summarizing the signal environment — paste into any AI |
+| **Debrief Export** | One-tap LLM-ready prompt summarizing the signal environment paste into any AI |
 | **Filtering** | Filter all views by signal strength, name pattern, security type |
 | **Fully Offline** | No internet required after install. No telemetry. No cloud dependency. |
 
@@ -235,7 +235,7 @@ To uninstall the Termux:API companion app, remove it through Android Settings �
 
 ## Notes on Privacy
 
-CIVOPS operates entirely on-device. It does not transmit scan data anywhere, does not require an internet connection after install, and does not contact any external service. The debrief export feature generates a text prompt that you manually paste into a tool of your choosing — no automatic API calls are made.
+CIVOPS operates entirely on-device. It does not transmit scan data anywhere, does not require an internet connection after install, and does not contact any external service. The debrief export feature generates a text prompt that you manually paste into a tool of your choosing no automatic API calls are made.
 
 Location permission is required by Android's Wi-Fi scanning API (`WifiManager`). CIVOPS does not use GPS or request precise location data.
 
