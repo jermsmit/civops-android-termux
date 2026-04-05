@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>CIVOPS // SIGNAL RECON</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+:root {
+  --bg:        #020c08;
+  --bg2:       #041209;
+  --grid:      #0a2e18;
+  --primary:   #00ff88;
+  --dim:       #00994f;
+  --faint:     #004d28;
+  --accent:    #00ffcc;
+  --warn:      #ffaa00;
+  --danger:    #ff3344;
+  --cell:      #5599ff;
+  --cell-dim:  #224488;
+  --text:      #b0ffd8;
+  --text-dim:  #3a8860;
+  --panel-bg:  rgba(0,10,6,0.85);
+  --scan-line: rgba(0,255,136,0.04);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    var(--scan-line) 2px, var(--scan-line) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ── HEADER ── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--faint);
+  background: var(--bg2);
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  animation: scanH 3s linear infinite;
+}
+@keyframes scanH {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.logo {
+  font-family: 'Orbitron', monospace;
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: 4px;
+  color: var(--primary);
+  text-shadow: 0 0 20px var(--primary);
+}
+.logo span { color: var(--accent); }
+
+.header-stats {
+  display: flex;
+  gap: 16px;
+  font-size: 10px;
+  color: var(--text-dim);
+}
+.stat-pill { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.stat-pill .val { font-size: 14px; font-family: 'Orbitron', monospace; color: var(--primary); }
+.stat-pill.cell .val { color: var(--cell); }
+.stat-pill.delta .val { color: var(--warn); }
+
+.clock { font-family: 'Orbitron', monospace; font-size: 11px; color: var(--dim); text-align: right; }
+.clock .date { font-size: 9px; color: var(--text-dim); }
+
+/* ── TABS ── */
+.tabs {
+  display: flex;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--faint);
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1;
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+  text-transform: uppercase;
+}
+.tab:hover { color: var(--text); background: var(--grid); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); text-shadow: 0 0 8px var(--primary); }
+.tab.cell-tab.active { color: var(--cell); border-bottom-color: var(--cell); }
+
+/* ── CONTENT ── */
+.content { flex: 1; overflow: hidden; position: relative; }
+.view { display: none; height: 100%; overflow: hidden; }
+.view.active { display: flex; flex-direction: column; }
+
+/* ── RADAR ── */
+#view-radar {
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(ellipse at center, #010d06 0%, var(--bg) 70%);
+}
+.radar-wrap { position: relative; flex-shrink: 0; }
+canvas#radar { display: block; }
+.radar-legend {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%);
+  display: flex; gap: 12px; font-size: 9px; color: var(--text-dim);
+}
+.legend-dot {
+  display: inline-block; width: 8px; height: 8px;
+  border-radius: 50%; margin-right: 4px; vertical-align: middle;
+}
+
+/* ── SIGNAL LISTS ── */
+#view-wifi, #view-cell { flex-direction: column; }
+
+.filter-bar {
+  display: flex; gap: 8px; padding: 8px 12px;
+  background: var(--bg2); border-bottom: 1px solid var(--faint);
+  flex-shrink: 0; flex-wrap: wrap;
+}
+.filter-bar input, .filter-bar select {
+  background: var(--bg); border: 1px solid var(--faint);
+  color: var(--text); font-family: 'Share Tech Mono', monospace;
+  font-size: 11px; padding: 4px 8px; border-radius: 2px; outline: none;
+}
+.filter-bar input:focus, .filter-bar select:focus { border-color: var(--dim); }
+.filter-bar input { flex: 1; min-width: 100px; }
+.filter-label { font-size: 9px; color: var(--text-dim); align-self: center; white-space: nowrap; }
+
+.signal-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.signal-list::-webkit-scrollbar { width: 4px; }
+.signal-list::-webkit-scrollbar-track { background: var(--bg); }
+.signal-list::-webkit-scrollbar-thumb { background: var(--faint); }
+
+.signal-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 8px; padding: 7px 12px;
+  border-bottom: 1px solid rgba(0,77,40,0.3);
+  cursor: default; transition: background 0.15s; align-items: center;
+}
+.signal-row:hover { background: rgba(0,255,136,0.04); }
+
+.sig-name { font-size: 12px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sig-name.hidden { color: var(--text-dim); font-style: italic; }
+.sig-sub { font-size: 9px; color: var(--text-dim); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sig-meta { display: flex; flex-direction: column; gap: 2px; }
+
+.rssi-bar-wrap { width: 48px; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+.rssi-val { font-size: 10px; font-family: 'Orbitron', monospace; }
+.rssi-bar { width: 100%; height: 3px; background: var(--faint); border-radius: 2px; overflow: hidden; }
+.rssi-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+.flags { display: flex; flex-direction: column; gap: 2px; }
+.flag { font-size: 8px; padding: 1px 4px; border-radius: 2px; letter-spacing: 0.5px; }
+.flag.WPA2    { background: rgba(0,255,136,0.15); color: var(--primary); }
+.flag.WPA     { background: rgba(255,170,0,0.15);  color: var(--warn); }
+.flag.WEP     { background: rgba(255,51,68,0.2);   color: var(--danger); }
+.flag.OPEN    { background: rgba(255,51,68,0.2);   color: var(--danger); }
+.flag.WPS     { background: rgba(255,170,0,0.1);   color: var(--warn); }
+.flag.ESS     { background: rgba(0,77,40,0.3);     color: var(--text-dim); }
+.flag.REG     { background: rgba(0,255,204,0.15);  color: var(--accent); }
+
+.vendor-tag { font-size: 9px; color: var(--accent); opacity: 0.7; }
+.ch-tag     { font-size: 9px; color: var(--text-dim); font-family: 'Orbitron', monospace; }
+
+/* ── DELTA VIEW ── */
+#view-timeline { flex-direction: column; }
+.delta-list { flex: 1; overflow-y: auto; padding: 4px 0; }
+.delta-list::-webkit-scrollbar { width: 4px; }
+.delta-list::-webkit-scrollbar-track { background: var(--bg); }
+.delta-list::-webkit-scrollbar-thumb { background: var(--faint); }
+
+.delta-row {
+  display: grid; grid-template-columns: 52px 56px 1fr auto;
+  gap: 8px; padding: 6px 12px;
+  border-bottom: 1px solid rgba(0,77,40,0.3);
+  align-items: center; font-size: 11px;
+}
+.delta-row.new       { border-left: 2px solid var(--primary); }
+.delta-row.lost      { border-left: 2px solid var(--danger); opacity: 0.7; }
+.delta-row.returning { border-left: 2px solid var(--warn); }
+
+.delta-time { font-size: 9px; color: var(--text-dim); font-family: 'Orbitron', monospace; }
+.delta-status { font-size: 9px; font-family: 'Orbitron', monospace; padding: 2px 5px; border-radius: 2px; text-align: center; }
+.status-new       { background: rgba(0,255,136,0.15); color: var(--primary); }
+.status-lost      { background: rgba(255,51,68,0.15); color: var(--danger); }
+.status-returning { background: rgba(255,170,0,0.15); color: var(--warn); }
+.delta-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delta-src  { font-size: 9px; color: var(--text-dim); text-align: right; }
+
+/* ── DEBRIEF VIEW ── */
+#view-debrief { flex-direction: column; }
+.debrief-controls {
+  padding: 10px 12px; display: flex; gap: 8px; align-items: center;
+  background: var(--bg2); border-bottom: 1px solid var(--faint); flex-shrink: 0;
+}
+.btn {
+  font-family: 'Orbitron', monospace; font-size: 10px; letter-spacing: 1px;
+  padding: 6px 14px; border: 1px solid var(--dim); background: transparent;
+  color: var(--primary); cursor: pointer; border-radius: 2px;
+  transition: all 0.2s; text-transform: uppercase;
+}
+.btn:hover { background: var(--primary); color: var(--bg); box-shadow: 0 0 12px var(--primary); }
+.btn.accent { border-color: var(--accent); color: var(--accent); }
+.btn.accent:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 12px var(--accent); }
+
+.debrief-output {
+  flex: 1; overflow-y: auto; padding: 12px;
+  font-size: 11px; line-height: 1.6; color: var(--text-dim);
+  white-space: pre-wrap; word-break: break-word;
+}
+.debrief-output::-webkit-scrollbar { width: 4px; }
+.debrief-output::-webkit-scrollbar-track { background: var(--bg); }
+.debrief-output::-webkit-scrollbar-thumb { background: var(--faint); }
+.debrief-output .h2  { color: var(--primary); font-family: 'Orbitron', monospace; font-size: 12px; }
+.debrief-output .h3  { color: var(--accent); margin-top: 8px; }
+.debrief-output .sep { color: var(--faint); }
+
+/* ── TOAST ── */
+#toast {
+  position: fixed; bottom: 20px; left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--bg2); border: 1px solid var(--primary);
+  color: var(--primary); font-size: 11px; padding: 8px 16px;
+  border-radius: 2px; z-index: 10000; transition: transform 0.3s ease;
+  white-space: nowrap; box-shadow: 0 0 20px rgba(0,255,136,0.3);
+}
+#toast.show { transform: translateX(-50%) translateY(0); }
+
+.empty { padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 11px; }
+.empty .icon { font-size: 28px; margin-bottom: 8px; opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CIV<span>OPS</span></div>
+  <div class="header-stats">
+    <div class="stat-pill">
+      <span class="val" id="hdr-wifi">0</span>
+      <span>Wi-Fi</span>
+    </div>
+    <div class="stat-pill cell">
+      <span class="val" id="hdr-cell">0</span>
+      <span>CELL</span>
+    </div>
+    <div class="stat-pill delta">
+      <span class="val" id="hdr-delta">0</span>
+      <span>Δ</span>
+    </div>
+  </div>
+  <div class="clock">
+    <div id="clock-time">--:--:--</div>
+    <div class="date" id="clock-date">----.--.--</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" data-view="radar">⬤ RADAR</div>
+  <div class="tab" data-view="wifi">Wi-Fi</div>
+  <div class="tab cell-tab" data-view="cell">CELL</div>
+  <div class="tab" data-view="timeline">DELTA</div>
+  <div class="tab" data-view="debrief">DEBRIEF</div>
+</div>
+
+<div class="content">
+
+  <!-- RADAR -->
+  <div class="view active" id="view-radar">
+    <div class="radar-wrap">
+      <canvas id="radar"></canvas>
+    </div>
+    <div class="radar-legend">
+      <span><span class="legend-dot" style="background:#00ff88"></span>Wi-Fi</span>
+      <span><span class="legend-dot" style="background:#5599ff"></span>Cell</span>
+      <span><span class="legend-dot" style="background:#ffaa00"></span>Weak</span>
+      <span><span class="legend-dot" style="background:#ff3344"></span>Open/Risk</span>
+    </div>
+  </div>
+
+  <!-- Wi-Fi LIST -->
+  <div class="view" id="view-wifi">
+    <div class="filter-bar">
+      <input type="text" id="wifi-filter" placeholder="Filter SSID...">
+      <span class="filter-label">RSSI ≥</span>
+      <select id="wifi-rssi">
+        <option value="-100">All</option>
+        <option value="-80">-80</option>
+        <option value="-70">-70</option>
+        <option value="-60">-60</option>
+      </select>
+      <select id="wifi-flag">
+        <option value="">Any security</option>
+        <option value="OPEN">Open</option>
+        <option value="WPS">WPS</option>
+        <option value="WEP">WEP</option>
+      </select>
+    </div>
+    <div class="signal-list" id="wifi-list"></div>
+  </div>
+
+  <!-- CELL LIST -->
+  <div class="view" id="view-cell">
+    <div class="filter-bar">
+      <input type="text" id="cell-filter" placeholder="Filter type/CID...">
+      <span class="filter-label">dBm ≥</span>
+      <select id="cell-rssi">
+        <option value="-140">All</option>
+        <option value="-100">-100</option>
+        <option value="-90">-90</option>
+        <option value="-80">-80</option>
+      </select>
+    </div>
+    <div class="signal-list" id="cell-list"></div>
+  </div>
+
+  <!-- DELTA -->
+  <div class="view" id="view-timeline">
+    <div class="filter-bar">
+      <span class="filter-label">Window</span>
+      <select id="delta-window">
+        <option value="10">10 min</option>
+        <option value="30" selected>30 min</option>
+        <option value="60">1 hr</option>
+      </select>
+      <select id="delta-source">
+        <option value="all">All sources</option>
+        <option value="wifi">Wi-Fi</option>
+        <option value="cell">Cell</option>
+      </select>
+      <select id="delta-status">
+        <option value="">All events</option>
+        <option value="new">New</option>
+        <option value="lost">Lost</option>
+        <option value="returning">Returning</option>
+      </select>
+    </div>
+    <div class="delta-list" id="delta-list"></div>
+  </div>
+
+  <!-- DEBRIEF -->
+  <div class="view" id="view-debrief">
+    <div class="debrief-controls">
+      <select id="debrief-window" style="background:var(--bg);border:1px solid var(--faint);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 8px;">
+        <option value="15">15 min</option>
+        <option value="30" selected>30 min</option>
+        <option value="60">1 hr</option>
+      </select>
+      <button class="btn" id="btn-debrief">GENERATE</button>
+      <button class="btn accent" id="btn-copy">COPY PROMPT</button>
+    </div>
+    <div class="debrief-output" id="debrief-out">
+      <div class="empty">
+        <div class="icon">◈</div>
+        Select a time window and tap GENERATE to build an LLM-ready signal debrief.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────
+const state = {
+  wifi: [], cell: [], deltas: [],
+  radarBlips: [], sweepAngle: 0,
+  debriefText: '',
+};
+
+// ─── TABS ────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+    if (tab.dataset.view === 'radar') resizeRadar();
+  });
+});
+
+// ─── CLOCK ───────────────────────────────────
+function tickClock() {
+  const now = new Date();
+  document.getElementById('clock-time').textContent = now.toTimeString().slice(0,8);
+  document.getElementById('clock-date').textContent = now.toISOString().slice(0,10);
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// ─── FETCH ───────────────────────────────────
+async function fetchJSON(url) {
+  try { return await (await fetch(url)).json(); }
+  catch { return null; }
+}
+
+async function refresh() {
+  const [live, deltas] = await Promise.all([
+    fetchJSON('/api/live'),
+    fetchJSON('/api/deltas?mins=30'),
+  ]);
+  if (live) {
+    state.wifi = live.signals.filter(s => s.source === 'wifi');
+    state.cell = live.signals.filter(s => s.source === 'cell');
+    document.getElementById('hdr-wifi').textContent = state.wifi.length;
+    document.getElementById('hdr-cell').textContent = state.cell.length;
+    updateRadarBlips();
+    renderWifiList();
+    renderCellList();
+  }
+  if (deltas) {
+    state.deltas = deltas.deltas || [];
+    document.getElementById('hdr-delta').textContent = state.deltas.length;
+    renderDeltaList();
+  }
+}
+
+// ─── RSSI HELPERS ────────────────────────────
+function rssiToPercent(rssi) {
+  return Math.max(0, Math.min(100, ((rssi + 110) / 80) * 100));
+}
+function rssiToColor(rssi, isWifi) {
+  const pct = rssiToPercent(rssi);
+  if (pct > 60) return isWifi ? '#00ff88' : '#5599ff';
+  if (pct > 30) return '#ffaa00';
+  return '#ff3344';
+}
+
+// ─── RADAR ───────────────────────────────────
+const canvas = document.getElementById('radar');
+const ctx    = canvas.getContext('2d');
+
+function resizeRadar() {
+  const view = document.getElementById('view-radar');
+  const size = Math.min(view.clientWidth, view.clientHeight - 40);
+  canvas.width = canvas.height = size;
+}
+resizeRadar();
+window.addEventListener('resize', resizeRadar);
+
+function updateRadarBlips() {
+  const signals = [...state.wifi, ...state.cell];
+  const cx = canvas.width / 2, cy = canvas.height / 2;
+  const maxR = (canvas.width / 2) * 0.88;
+
+  state.radarBlips = signals.map(s => {
+    let hash = 0;
+    for (let i = 0; i < s.identifier.length; i++)
+      hash = (hash * 31 + s.identifier.charCodeAt(i)) & 0xffffffff;
+    if (s.address) for (let i = 0; i < s.address.length; i++)
+      hash = (hash * 31 + s.address.charCodeAt(i)) & 0xffffffff;
+
+    const angle  = (hash & 0xffff) / 0xffff * Math.PI * 2;
+    const pct    = rssiToPercent(s.rssi) / 100;
+    const dist   = maxR * (1 - pct * 0.7 + 0.1);
+    const isWifi = s.source === 'wifi';
+    const flags  = typeof s.flags === 'string' ? JSON.parse(s.flags) : (s.flags || []);
+    const isOpen = flags.includes('OPEN') || flags.includes('WEP');
+
+    return {
+      x:     cx + Math.cos(angle) * dist,
+      y:     cy + Math.sin(angle) * dist,
+      color: isOpen ? '#ff3344' : rssiToColor(s.rssi, isWifi),
+      size:  isWifi ? 5 : 4,
+      label: s.identifier.slice(0, 12),
+    };
+  });
+}
+
+function drawRadar() {
+  const w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h / 2, maxR = w * 0.44;
+
+  ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#010d06';
+  ctx.fillRect(0, 0, w, h);
+
+  [0.25, 0.5, 0.75, 1].forEach(f => {
+    ctx.beginPath();
+    ctx.arc(cx, cy, maxR * f, 0, Math.PI * 2);
+    ctx.strokeStyle = f === 1 ? '#0d4025' : '#071a10';
+    ctx.lineWidth = f === 1 ? 1.5 : 0.8;
+    ctx.stroke();
+  });
+
+  ctx.strokeStyle = '#071a10'; ctx.lineWidth = 0.8;
+  ctx.beginPath(); ctx.moveTo(cx - maxR, cy); ctx.lineTo(cx + maxR, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx, cy - maxR); ctx.lineTo(cx, cy + maxR); ctx.stroke();
+
+  state.sweepAngle = (state.sweepAngle + 0.012) % (Math.PI * 2);
+  const sweepSpan = Math.PI * 0.45;
+  for (let i = 0; i < 30; i++) {
+    const a0 = state.sweepAngle - (sweepSpan * i / 30);
+    const a1 = state.sweepAngle - (sweepSpan * (i + 1) / 30);
+    ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, maxR, a0, a1, true); ctx.closePath();
+    ctx.fillStyle = `rgba(0,255,136,${0.06 * (1 - i / 30)})`; ctx.fill();
+  }
+
+  ctx.beginPath(); ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(state.sweepAngle) * maxR, cy + Math.sin(state.sweepAngle) * maxR);
+  ctx.strokeStyle = 'rgba(0,255,136,0.9)'; ctx.lineWidth = 1.5; ctx.stroke();
+
+  ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#00ff88'; ctx.fill();
+
+  state.radarBlips.forEach(b => {
+    const grd = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.size * 4);
+    grd.addColorStop(0, b.color + 'aa'); grd.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 4, 0, Math.PI * 2);
+    ctx.fillStyle = grd; ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2);
+    ctx.fillStyle = b.color; ctx.fill();
+    ctx.fillStyle = b.color + 'cc'; ctx.font = '8px Share Tech Mono';
+    ctx.fillText(b.label, b.x + b.size + 3, b.y + 3);
+  });
+
+  requestAnimationFrame(drawRadar);
+}
+drawRadar();
+
+// ─── Wi-Fi LIST ──────────────────────────────
+function renderWifiList() {
+  const filter  = document.getElementById('wifi-filter').value.toLowerCase();
+  const minRssi = parseInt(document.getElementById('wifi-rssi').value);
+  const flagF   = document.getElementById('wifi-flag').value;
+
+  let sigs = state.wifi.filter(s => {
+    if (s.rssi < minRssi) return false;
+    if (filter && !s.identifier.toLowerCase().includes(filter)) return false;
+    if (flagF) {
+      const flags = typeof s.flags === 'string' ? JSON.parse(s.flags) : (s.flags || []);
+      if (!flags.includes(flagF)) return false;
+    }
+    return true;
+  });
+
+  const el = document.getElementById('wifi-list');
+  if (!sigs.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">◌</div>No signals match filters</div>';
+    return;
+  }
+
+  el.innerHTML = sigs.map(s => {
+    const pct    = rssiToPercent(s.rssi);
+    const color  = rssiToColor(s.rssi, true);
+    const flags  = typeof s.flags === 'string' ? JSON.parse(s.flags) : (s.flags || []);
+    const flagHTML = flags.map(f => `<span class="flag ${f}">${f}</span>`).join('');
+    return `<div class="signal-row">
+      <div class="sig-meta">
+        <div class="sig-name ${s.identifier==='<hidden>'?'hidden':''}">${esc(s.identifier)}</div>
+        <div class="sig-sub">${esc(s.address||'')} &nbsp;<span class="vendor-tag">${esc(s.vendor||'')}</span></div>
+      </div>
+      <div class="flags">${flagHTML}</div>
+      <div class="ch-tag">CH${s.channel||'?'}</div>
+      <div class="rssi-bar-wrap">
+        <span class="rssi-val" style="color:${color}">${s.rssi}</span>
+        <div class="rssi-bar"><div class="rssi-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('wifi-filter').addEventListener('input', renderWifiList);
+document.getElementById('wifi-rssi').addEventListener('change', renderWifiList);
+document.getElementById('wifi-flag').addEventListener('change', renderWifiList);
+
+// ─── CELL LIST ───────────────────────────────
+function renderCellList() {
+  const filter  = document.getElementById('cell-filter').value.toLowerCase();
+  const minRssi = parseInt(document.getElementById('cell-rssi').value);
+
+  let sigs = state.cell.filter(s => {
+    if (s.rssi < minRssi) return false;
+    if (filter && !s.identifier.toLowerCase().includes(filter) &&
+        !(s.address||'').toLowerCase().includes(filter)) return false;
+    return true;
+  });
+
+  const el = document.getElementById('cell-list');
+  if (!sigs.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">◌</div>No cell towers detected</div>';
+    return;
+  }
+
+  el.innerHTML = sigs.map(s => {
+    const pct   = rssiToPercent(s.rssi);
+    const color = rssiToColor(s.rssi, false);
+    const flags = typeof s.flags === 'string' ? JSON.parse(s.flags) : (s.flags || []);
+    const isReg = flags.includes('REGISTERED');
+    const extraFlags = flags.filter(f => f !== 'REGISTERED').join(' ');
+    return `<div class="signal-row">
+      <div class="sig-meta">
+        <div class="sig-name" style="${isReg?'color:var(--accent)':''}">${esc(s.identifier)}</div>
+        <div class="sig-sub">${esc(s.vendor||'')} &nbsp;<span class="vendor-tag">${esc(extraFlags)}</span></div>
+      </div>
+      <div class="flags">${isReg?'<span class="flag REG">REG</span>':''}</div>
+      <div class="ch-tag">${esc(s.address||'')}</div>
+      <div class="rssi-bar-wrap">
+        <span class="rssi-val" style="color:${color}">${s.rssi}</span>
+        <div class="rssi-bar"><div class="rssi-fill" style="width:${pct}%;background:${color}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('cell-filter').addEventListener('input', renderCellList);
+document.getElementById('cell-rssi').addEventListener('change', renderCellList);
+
+// ─── DELTA LIST ──────────────────────────────
+function renderDeltaList() {
+  const window_ = parseInt(document.getElementById('delta-window').value);
+  const srcF    = document.getElementById('delta-source').value;
+  const statF   = document.getElementById('delta-status').value;
+  const since   = Date.now() / 1000 - window_ * 60;
+
+  let rows = state.deltas.filter(d => {
+    if (d.ts < since) return false;
+    if (srcF && srcF !== 'all' && d.source !== srcF) return false;
+    if (statF && d.status !== statF) return false;
+    return true;
+  });
+
+  const el = document.getElementById('delta-list');
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">◈</div>No delta events in window</div>';
+    return;
+  }
+
+  el.innerHTML = rows.map(d => {
+    const t = new Date(d.ts * 1000).toTimeString().slice(0,8);
+    return `<div class="delta-row ${d.status}">
+      <span class="delta-time">${t}</span>
+      <span class="delta-status status-${d.status}">${d.status.toUpperCase()}</span>
+      <span class="delta-name">${esc(d.identifier)}</span>
+      <span class="delta-src">${d.source.toUpperCase()}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('delta-window').addEventListener('change', renderDeltaList);
+document.getElementById('delta-source').addEventListener('change', renderDeltaList);
+document.getElementById('delta-status').addEventListener('change', renderDeltaList);
+
+// ─── DEBRIEF ─────────────────────────────────
+document.getElementById('btn-debrief').addEventListener('click', async () => {
+  const mins = document.getElementById('debrief-window').value;
+  const el   = document.getElementById('debrief-out');
+  el.textContent = 'Generating debrief...';
+  const data = await fetchJSON(`/api/debrief?mins=${mins}`);
+  if (!data) { el.textContent = 'Error fetching debrief.'; return; }
+  state.debriefText = data.prompt || '';
+  el.innerHTML = renderDebriefHTML(data.prompt);
+});
+
+document.getElementById('btn-copy').addEventListener('click', () => {
+  if (!state.debriefText) { toast('Generate a debrief first'); return; }
+  navigator.clipboard.writeText(state.debriefText).then(() => toast('Prompt copied to clipboard'));
+});
+
+function renderDebriefHTML(text) {
+  if (!text) return '<div class="empty"><div class="icon">◈</div>No data yet.</div>';
+  return text.split('\n').map(l => {
+    if (l.startsWith('## '))  return `<div class="h2">${esc(l.slice(3))}</div>`;
+    if (l.startsWith('### ')) return `<div class="h3">${esc(l.slice(4))}</div>`;
+    if (l.startsWith('---'))  return `<div class="sep">──────────────────────────────</div>`;
+    return esc(l);
+  }).join('\n');
+}
+
+// ─── TOAST ───────────────────────────────────
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ─── UTIL ────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── POLL ────────────────────────────────────
+refresh();
+setInterval(refresh, 10000);
+</script>
+</body>
+</html>
