@@ -55,7 +55,7 @@ CIVOPS turns an Android phone running Termux into a passive signal intelligence 
 ```bash
 # In Termux
 pkg install git
-git clone https://github.com/YOUR_USERNAME/civops.git ~/civops
+git clone https://github.com/jermsmit/civops.git ~/civops
 bash ~/civops/install.sh
 ```
 
